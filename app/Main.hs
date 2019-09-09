@@ -167,12 +167,20 @@ eqv :: [LispVal] -> ThrowsError LispVal
 eqv [arg1, arg2] = return $ Bool $ arg1 == arg2
 eqv badArgList = throwError $ NumArgs 2 badArgList
 
+-- ListとDottedList以外のパターンを比較できるやつ
+equal' :: (LispVal, LispVal) -> ThrowsError Bool
+equal' (arg1, arg2) = do
+  primitiveEquals <- or <$> mapM (unpackEquals arg1 arg2)
+                    [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
+  eqvEquals <- eqv [arg1, arg2]
+  return (primitiveEquals || let (Bool x) = eqvEquals in x)
+
 equal :: [LispVal] -> ThrowsError LispVal
-equal [arg1, arg2] = do
-    primitiveEquals <- or <$> mapM (unpackEquals arg1 arg2)
-                      [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
-    eqvEquals <- eqv [arg1, arg2]
-    return $ Bool (primitiveEquals || let (Bool x) = eqvEquals in x)
+equal [DottedList xs x, DottedList ys y] = equal [List $ xs ++ [x], List $ ys ++ [y]]
+equal [List xs, List ys]
+  | length xs == length ys = Bool . and <$> sequence (equal' <$> zip xs ys)
+  | otherwise = return $ Bool False
+equal [arg1, arg2] = Bool <$> equal' (arg1, arg2)
 equal badArgList = throwError $ NumArgs 2 badArgList
 
 unpackNum :: LispVal -> ThrowsError Integer
